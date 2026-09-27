@@ -794,9 +794,9 @@ function renderList({ animate = true } = {}) {
 
 /* ---------- trust signals: checked against the article, how many outlets, outlet from a party country ---------- */
 function checkedBadge(v) {
-  if (v === 1) return `<span class="vb ok" title="Checked against the full text of the article it cites">✓ checked</span>`;
-  if (v === 0) return `<span class="vb warn" title="The article couldn't be read to check this (paywall or blocked); treat with care">not checked</span>`;
-  return `<span class="vb old" title="Recorded before claims were checked against their articles">older, unchecked</span>`;
+  if (v === 1) return `<span class="vb ok" title="The cited article supports this wording. This checks the attribution, not whether the report is independently true.">✓ matches source</span>`;
+  if (v === 0) return `<span class="vb warn" title="The cited article could not be read to check this claim (for example, it may be paywalled or blocked).">source not checked</span>`;
+  return `<span class="vb old" title="This item predates article-text checks, so it has not been checked against its source.">not checked</span>`;
 }
 function outletsBadge(outlets) {
   const n = (outlets || []).length;
@@ -814,6 +814,35 @@ function partyOutletLabel(outlet, c) {
 function citeMarks(x) {
   if ((x.sources || []).length) return x.sources.map(u => ` <a class="cite" href="${esc(u)}" target="_blank" rel="noopener" title="source: ${esc(host(u))}">↗</a>`).join("");
   return ` <span class="bg" title="From general background knowledge, not stated in a cited article">background</span>`;
+}
+
+function developmentGroups(developments) {
+  const groups = new Map();
+  for (const item of developments || []) {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")) ? item.date : "Date not specified";
+    if (!groups.has(date)) groups.set(date, []);
+    groups.get(date).push(item);
+  }
+  return [...groups].sort(([a], [b]) => {
+    if (a === "Date not specified") return b === a ? 0 : 1;
+    if (b === "Date not specified") return -1;
+    return b.localeCompare(a);
+  });
+}
+
+function developmentDate(date) {
+  if (date === "Date not specified") return date;
+  const parsed = parseStart(date);
+  return parsed ? parsed.date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : date;
+}
+
+function developmentTimeline(developments, conflict) {
+  return developmentGroups(developments).map(([date, items]) => `
+    <section class="dev-day">
+      <h4><time${date !== "Date not specified" ? ` datetime="${esc(date)}"` : ""}>${esc(developmentDate(date))}</time><span>${items.length} ${items.length === 1 ? "update" : "updates"}</span></h4>
+      ${items.map(x => `<div class="dev" data-url="${esc((x.sources || [])[0] || "")}"${(x.sources || []).length ? ` tabindex="0" role="button"` : ""}><span>${esc(x.text)}${(x.sources || []).map(u => ` <a href="${esc(u)}" target="_blank" rel="noopener" title="Open original article: ${esc(host(u))}">↗ source</a>`).join("")}
+        <span class="trust">${checkedBadge(x.verified)}${outletsBadge(x.outlets)}${(x.outlets || []).map(o => partyOutletLabel(o, conflict)).join("")}</span></span></div>`).join("")}
+    </section>`).join("");
 }
 
 function renderDetail() {
@@ -843,8 +872,8 @@ function renderDetail() {
     <h3>Consequences</h3>
     <div class="cons">${(c.consequences || []).map(x => `<div class="con"><span class="cat">${esc(x.category)}</span><span>${esc(x.text)}${(x.affects || []).length ? ` <span style="opacity:.6">${x.affects.map(a => flag(norm(a))).join(" ")}</span>` : ""}${citeMarks(x)}</span></div>`).join("") || "<div class='empty'>none recorded</div>"}</div>
     <h3>Latest developments</h3>
-    ${(c.developments || []).map(x => `<div class="dev" data-url="${esc((x.sources || [])[0] || "")}"${(x.sources || []).length ? ` tabindex="0" role="button"` : ""}><span class="date">${esc(x.date)}</span><span>${esc(x.text)}${(x.sources || []).map(u => ` <a href="${esc(u)}" target="_blank" title="open original">↗</a>`).join("")}
-      <span class="trust">${checkedBadge(x.verified)}${outletsBadge(x.outlets)}${(x.outlets || []).map(o => partyOutletLabel(o, c)).join("")}</span></span></div>`).join("")}
+    <p class="timeline-note">Claims are checked against the linked article when its full text is available. “Matches source” confirms what the article says, not independent verification of the event.</p>
+    ${developmentTimeline(c.developments, c) || "<div class='empty'>none recorded</div>"}
     <h3>Reported attacks (7 days)</h3>
     ${conflictStrikes(c.id).map(st => `<div class="strike" data-id="${st.id}" tabindex="0" role="button">
       <span class="date">${esc(st.date.slice(5).replace("-", "/"))}</span><span class="w">${weaponSvg(st.weapon)}</span>
